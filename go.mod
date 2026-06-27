@@ -1,4 +1,4 @@
-module github.com/AdamBowers/terraform-tf/v2
+module github.com/AdamBowers/proxmox-tf/v2
 
 go 1.26.4
 
