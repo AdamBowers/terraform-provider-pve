@@ -5,7 +5,6 @@ import (
 	"regexp"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int32validator"
-	"github.com/hashicorp/terraform-plugin-framework-validators/objectvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -64,80 +63,59 @@ func (p *pveProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *
 				Optional:    true,
 				Description: "Don't validate SSL certificate. Default is False.",
 			},
-		},
-		Blocks: map[string]schema.Block{
-			"credential": schema.SingleNestedBlock{
+			"credential": schema.SingleNestedAttribute{
+				Required:    true,
 				Description: "Credentials to used to connect to proxmox virtual environment node(s).",
-				Validators: []validator.Object{
-					objectvalidator.ExactlyOneOf(
-						path.MatchRoot("credential").AtName("basic"),
-						path.MatchRoot("credential").AtName("token"),
-					),
-				},
-				Blocks: map[string]schema.Block{
-					"basic": schema.SingleNestedBlock{
-						Attributes: map[string]schema.Attribute{
-							"username": schema.StringAttribute{
-								Required: true,
-								Description: "Default username to be used for all nodes unless defined otherwise. " +
-									"Format as '<userid>@<realm>'.",
-								Validators: []validator.String{
-									stringvalidator.LengthAtLeast(3),
-									stringvalidator.RegexMatches(
-										rgxUsername,
-										"username provided is an invalid pattern",
-									),
-								},
-							},
-							"password": schema.StringAttribute{
-								Required:    true,
-								Sensitive:   true,
-								Description: "Default password to be used for all nodes unless defined otherwise.",
-							},
-							"otp": schema.StringAttribute{
-								Optional:    true,
-								Sensitive:   true,
-								Description: "OTP to be used for all nodes unless defined otherwise.",
-							},
+				Attributes: map[string]schema.Attribute{
+					"username": schema.StringAttribute{
+						Required:    true,
+						Description: "Username to be used for all nodes unless defined otherwise. Format as '<userid>@<realm>'.",
+						Validators: []validator.String{
+							stringvalidator.LengthAtLeast(3),
+							stringvalidator.RegexMatches(rgxUsername, "username provided is an invalid pattern"),
 						},
 					},
-					"token": schema.SingleNestedBlock{
-						Attributes: map[string]schema.Attribute{
-							"username": schema.StringAttribute{
-								Required: true,
-								Description: "username API token is associated with. " +
-									"Format as '<userid>@<realm>'.",
-								Validators: []validator.String{
-									stringvalidator.LengthAtLeast(3),
-									stringvalidator.RegexMatches(
-										rgxUsername,
-										"username provided is an invalid pattern",
-									),
-								},
-							},
-							"name": schema.StringAttribute{
-								Required:    true,
-								Description: "API Token Name/ID.",
-								Validators: []validator.String{
-									stringvalidator.LengthBetween(2, 64),
-									stringvalidator.RegexMatches(
-										rgxTokenName,
-										"name provided is an invalid pattern",
-									),
-								},
-							},
-							"secret": schema.StringAttribute{
-								Required:    true,
-								Sensitive:   true,
-								Description: "API token secret.",
-								Validators: []validator.String{
-									stringvalidator.LengthBetween(36, 36),
-									stringvalidator.RegexMatches(
-										rgxTokenSecret,
-										"secret provided is an invalid pattern",
-									),
-								},
-							},
+					"password": schema.StringAttribute{
+						Optional:    true,
+						Sensitive:   true,
+						Description: "Default password to be used for all nodes unless defined otherwise.",
+						Validators: []validator.String{
+							stringvalidator.ExactlyOneOf(
+								path.MatchRoot("credential").AtName("token_name"),
+							),
+						},
+					},
+					"otp": schema.StringAttribute{
+						Optional:    true,
+						Sensitive:   true,
+						Description: "OTP to be used for all nodes unless defined otherwise.",
+						Validators: []validator.String{
+							stringvalidator.AlsoRequires(
+								path.MatchRoot("credential").AtName("password"),
+							),
+						},
+					},
+					"token_name": schema.StringAttribute{
+						Optional:    true,
+						Description: "API Token Name/ID.",
+						Validators: []validator.String{
+							stringvalidator.LengthBetween(2, 64),
+							stringvalidator.RegexMatches(rgxTokenName, "name provided is an invalid pattern"),
+							stringvalidator.AlsoRequires(
+								path.MatchRoot("credential").AtName("token_secret"),
+							),
+						},
+					},
+					"token_secret": schema.StringAttribute{
+						Optional:    true,
+						Sensitive:   true,
+						Description: "API token secret.",
+						Validators: []validator.String{
+							stringvalidator.LengthBetween(36, 36),
+							stringvalidator.RegexMatches(rgxTokenSecret, "secret provided is an invalid pattern"),
+							stringvalidator.AlsoRequires(
+								path.MatchRoot("credential").AtName("token_name"),
+							),
 						},
 					},
 				},
