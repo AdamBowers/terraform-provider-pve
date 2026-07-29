@@ -5,7 +5,7 @@ import (
 	"flag"
 	"log"
 
-	"github.com/proxmox-tf/proxmox-tf/internal/provider"
+	"github.com/AdamBowers/terraform-provider-pve/v2/internal/provider"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 )
@@ -21,7 +21,7 @@ func main() {
 	var address string
 
 	flag.BoolVar(&debug, "debug", false, "run provider with debugger support.")
-	flag.StringVar(&address, "address", "hashicorp.com/edu/proxmox-tf", "registry address.")
+	flag.StringVar(&address, "address", "hashicorp.com/edu/pve", "registry address.")
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{

@@ -1,8 +1,11 @@
-module github.com/AdamBowers/terraform-tf/v2
+module github.com/AdamBowers/terraform-provider-pve/v2
 
 go 1.26.4
 
-require github.com/hashicorp/terraform-plugin-framework v1.19.0
+require (
+	github.com/hashicorp/terraform-plugin-framework v1.19.0
+	github.com/hashicorp/terraform-plugin-framework-validators v0.19.0
+)
 
 require (
 	github.com/fatih/color v1.18.0 // indirect
