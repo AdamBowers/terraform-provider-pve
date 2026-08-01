@@ -2,17 +2,22 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"regexp"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int32validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	proxmox "github.com/luthermonson/go-proxmox"
 )
 
 var (
@@ -36,7 +41,7 @@ var (
 			Description: "Default password to be used for all nodes unless defined otherwise.",
 			Validators: []validator.String{
 				stringvalidator.ExactlyOneOf(
-					path.MatchRoot("credential").AtName("token_name"),
+					path.MatchRelative().AtParent().AtName("token_name"),
 				),
 			},
 		},
@@ -46,7 +51,7 @@ var (
 			Description: "OTP to be used for all nodes unless defined otherwise.",
 			Validators: []validator.String{
 				stringvalidator.AlsoRequires(
-					path.MatchRoot("credential").AtName("password"),
+					path.MatchRelative().AtParent().AtName("password"),
 				),
 			},
 		},
@@ -57,7 +62,7 @@ var (
 				stringvalidator.LengthBetween(2, 64),
 				stringvalidator.RegexMatches(rgxTokenName, "name provided is an invalid pattern"),
 				stringvalidator.AlsoRequires(
-					path.MatchRoot("credential").AtName("token_secret"),
+					path.MatchRelative().AtParent().AtName("token_secret"),
 				),
 			},
 		},
@@ -69,7 +74,7 @@ var (
 				stringvalidator.LengthBetween(36, 36),
 				stringvalidator.RegexMatches(rgxTokenSecret, "secret provided is an invalid pattern"),
 				stringvalidator.AlsoRequires(
-					path.MatchRoot("credential").AtName("token_name"),
+					path.MatchRelative().AtParent().AtName("token_name"),
 				),
 			},
 		},
@@ -99,11 +104,29 @@ var (
 	}
 )
 
-func New(version string) func() provider.Provider {
-	return func() provider.Provider {
-		return &pveProvider{
-			version: version,
+type ProviderClientManager map[string]*proxmox.Client
+
+type ConfiguredNode struct {
+	Host        string
+	Port        int32
+	IgnoreSSL   bool
+	Username    string
+	Password    string
+	Otp         string
+	TokenName   string
+	TokenSecret string
+}
+
+func (cn ConfiguredNode) GetCredentialMethod() proxmox.Option {
+	if cn.TokenName != "" && cn.TokenSecret != "" {
+		tokenID := fmt.Sprintf("%s!%s", cn.Username, cn.TokenName)
+		return proxmox.WithAPIToken(tokenID, cn.TokenSecret)
+	} else {
+		creds := proxmox.Credentials{
+			Username: cn.Username,
+			Password: cn.Password,
 		}
+		return proxmox.WithCredentials(&creds)
 	}
 }
 
@@ -112,6 +135,14 @@ type pveProvider struct {
 	// provider is built and ran locally, and "test" when running acceptance
 	// testing.
 	version string
+}
+
+func New(version string) func() provider.Provider {
+	return func() provider.Provider {
+		return &pveProvider{
+			version: version,
+		}
+	}
 }
 
 func (p *pveProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -152,10 +183,106 @@ func (p *pveProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *
 	}
 }
 func (p *pveProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+	var config pveProviderModel
+	var diags diag.Diagnostics
+
+	diags = req.Config.Get(ctx, &config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if config.Nodes.IsUnknown() || config.Credential.IsUnknown() {
+		return
+	}
+
+	var nodes []nodeModel
+	diags = config.Nodes.ElementsAs(ctx, &nodes, false)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var rootCred credentialModel
+	var hasRootCred bool
+	if !config.Credential.IsNull() && !config.Credential.IsUnknown() {
+		diags = config.Credential.As(ctx, &rootCred, basetypes.ObjectAsOptions{})
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		hasRootCred = true
+	} else {
+		hasRootCred = false
+	}
+
+	configuredNodes := make([]ConfiguredNode, 0, len(nodes))
+	for _, node := range nodes {
+		port := int32(8006)
+		if !node.Port.IsNull() && !node.Port.IsUnknown() {
+			port = node.Port.ValueInt32()
+		} else if !config.Port.IsNull() && !config.Port.IsUnknown() {
+			port = config.Port.ValueInt32()
+		}
+
+		ignoreSSL := false
+		if !node.IgnoreSSL.IsNull() && !node.IgnoreSSL.IsUnknown() {
+			ignoreSSL = node.IgnoreSSL.ValueBool()
+		} else if !config.IgnoreSSL.IsNull() && !config.IgnoreSSL.IsUnknown() {
+			ignoreSSL = config.IgnoreSSL.ValueBool()
+		}
+
+		var nodeCred credentialModel
+		if !node.Credential.IsNull() && !node.Credential.IsUnknown() {
+			diags = node.Credential.As(ctx, &nodeCred, basetypes.ObjectAsOptions{})
+			resp.Diagnostics.Append(diags...)
+			if resp.Diagnostics.HasError() {
+				return
+			}
+		} else if hasRootCred {
+			nodeCred = rootCred
+		} else {
+			resp.Diagnostics.AddError(
+				"Missing Required Configuration",
+				"Credentials must be specified. Define the 'credential' block globally at the provider root, or explicitly inside the 'nodes' configuration list.",
+			)
+			return
+		}
+
+		configuredNodes = append(configuredNodes, ConfiguredNode{
+			Host:        node.Host.ValueString(),
+			Port:        port,
+			IgnoreSSL:   ignoreSSL,
+			Username:    nodeCred.Username.ValueString(),
+			Password:    nodeCred.Password.ValueString(),
+			Otp:         nodeCred.Otp.ValueString(),
+			TokenName:   nodeCred.TokenName.ValueString(),
+			TokenSecret: nodeCred.TokenSecret.ValueString(),
+		})
+
+		manager := make(ProviderClientManager)
+		for _, confNode := range configuredNodes {
+			nodeUrl := fmt.Sprintf("https://%s:%d/api2/json", confNode.Host, confNode.Port)
+
+			opts := make([]proxmox.Option, 0, 3)
+			opts = append(opts, confNode.GetCredentialMethod())
+			if confNode.IgnoreSSL {
+				opts = append(opts, proxmox.WithInsecureSkipVerify())
+			}
+			opts = append(opts, proxmox.WithTimeout(30*time.Second))
+
+			client := proxmox.NewClient(nodeUrl)
+
+			manager[confNode.Host] = client
+		}
+
+		resp.DataSourceData = manager
+		resp.ResourceData = manager
+	}
 }
 func (p *pveProvider) ConfigValidators(ctx context.Context) []provider.ConfigValidator {
 	return []provider.ConfigValidator{
-		NewNodeFallbackValidator(),
+		NewNodeValidator(),
 	}
 }
 func (p *pveProvider) DataSources(_ context.Context) []func() datasource.DataSource {
