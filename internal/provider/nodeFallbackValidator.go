@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -27,15 +28,19 @@ func (v *nodeFallbackValidator) ValidateProvider(ctx context.Context, req provid
 }
 
 func validateCredentialFallback(ctx context.Context, req provider.ValidateConfigRequest, resp *provider.ValidateConfigResponse) {
+	var diags diag.Diagnostics
+
 	var rootCredential types.Object
-	if diags := req.Config.GetAttribute(ctx, path.Root("credential"), &rootCredential); diags.HasError() {
-		resp.Diagnostics.Append(diags...)
+	diags = req.Config.GetAttribute(ctx, path.Root("credential"), &rootCredential)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	var nodes []nodeModel
-	if diags := req.Config.GetAttribute(ctx, path.Root("nodes"), &nodes); diags.HasError() {
-		resp.Diagnostics.Append(diags...)
+	diags = req.Config.GetAttribute(ctx, path.Root("nodes"), &nodes)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
