@@ -3,22 +3,23 @@ package provider
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/google/uuid"
 )
 
 var _ datasource.DataSource = &nodeNetworkDataSource{}
 var _ datasource.DataSourceWithConfigure = &nodeNetworkDataSource{}
 
-func NewNodeNetworkDataSource() datasource.DataSource {
-	return &nodeNetworkDataSource{}
-}
-
 type nodeNetworkDataSource struct {
 	clients ProviderClientManager
+}
+
+func NewNodeNetworkDataSource() datasource.DataSource {
+	return &nodeNetworkDataSource{}
 }
 
 func (d *nodeNetworkDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -91,7 +92,6 @@ func (d *nodeNetworkDataSource) Configure(_ context.Context, req datasource.Conf
 func (d *nodeNetworkDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var state nodeNetworkDataSourceModel
 
-	// Read input configuration from the plan
 	diags := req.Config.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -100,18 +100,7 @@ func (d *nodeNetworkDataSource) Read(ctx context.Context, req datasource.ReadReq
 
 	targetNode := state.Node.ValueString()
 
-	// 1. Locate an active Proxmox client connection matching the requested host
-	pveClient, exists := d.clients[targetNode]
-	if !exists || pveClient == nil {
-		// Fallback lookup: if names don't match perfectly, grab the first available connection client
-		for _, client := range d.clients {
-			if client != nil {
-				pveClient = client
-				break
-			}
-		}
-	}
-
+	pveClient := d.clients[targetNode]
 	if pveClient == nil {
 		resp.Diagnostics.AddError(
 			"No Proxmox Client Connection Available",
@@ -120,7 +109,6 @@ func (d *nodeNetworkDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
-	// 2. Fetch the concrete Node handle from the API
 	node, err := pveClient.Node(ctx, targetNode)
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -130,7 +118,6 @@ func (d *nodeNetworkDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
-	// 3. Query the networks endpoint on that specific hardware node
 	networks, err := node.Networks(ctx) // Leverages go-proxmox's /nodes/{node}/network bindings
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -140,8 +127,8 @@ func (d *nodeNetworkDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
-	// 4. Map the slices into state outputs
-	state.ID = types.StringValue(fmt.Sprintf("pve-net-%s-%d", targetNode, time.Now().Unix()))
+	var uid [16]byte = uuid.New()
+	state.ID = types.StringValue(fmt.Sprintf("pve-net-%s-%x", targetNode, uid))
 	state.Networks = make([]nodeNetworkItemModel, 0, len(networks))
 
 	for _, netLink := range networks {
