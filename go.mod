@@ -3,6 +3,7 @@ module github.com/AdamBowers/terraform-provider-pve/v2
 go 1.26.4
 
 require (
+	github.com/google/uuid v1.6.0
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
 	github.com/hashicorp/terraform-plugin-framework-validators v0.19.0
 	github.com/luthermonson/go-proxmox v0.8.1
