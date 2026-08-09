@@ -12,7 +12,8 @@ type pveProviderModel struct {
 }
 
 type nodeModel struct {
-	Host       types.String `tfsdk:"host"`
+	Name       types.String `tfsdk:"name"`
+	Target     types.String `tfsdk:"target"`
 	Port       types.Int32  `tfsdk:"port"`
 	IgnoreSSL  types.Bool   `tfsdk:"ignore_ssl"`
 	Credential types.Object `tfsdk:"credential"`

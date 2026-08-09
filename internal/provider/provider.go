@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"time"
+	"sync"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int32validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -43,6 +43,10 @@ var (
 				stringvalidator.ExactlyOneOf(
 					path.MatchRelative().AtParent().AtName("token_name"),
 				),
+				stringvalidator.ConflictsWith(
+					path.MatchRelative().AtParent().AtName("token_name"),
+					path.MatchRelative().AtParent().AtName("token_secret"),
+				),
 			},
 		},
 		"otp": schema.StringAttribute{
@@ -50,6 +54,10 @@ var (
 			Sensitive:   true,
 			Description: "OTP to be used for all nodes unless defined otherwise.",
 			Validators: []validator.String{
+				stringvalidator.ConflictsWith(
+					path.MatchRelative().AtParent().AtName("token_name"),
+					path.MatchRelative().AtParent().AtName("token_secret"),
+				),
 				stringvalidator.AlsoRequires(
 					path.MatchRelative().AtParent().AtName("password"),
 				),
@@ -61,6 +69,13 @@ var (
 			Validators: []validator.String{
 				stringvalidator.LengthBetween(2, 64),
 				stringvalidator.RegexMatches(rgxTokenName, "name provided is an invalid pattern"),
+				stringvalidator.ExactlyOneOf(
+					path.MatchRelative().AtParent().AtName("password"),
+				),
+				stringvalidator.ConflictsWith(
+					path.MatchRelative().AtParent().AtName("password"),
+					path.MatchRelative().AtParent().AtName("otp"),
+				),
 				stringvalidator.AlsoRequires(
 					path.MatchRelative().AtParent().AtName("token_secret"),
 				),
@@ -73,6 +88,10 @@ var (
 			Validators: []validator.String{
 				stringvalidator.LengthBetween(36, 36),
 				stringvalidator.RegexMatches(rgxTokenSecret, "secret provided is an invalid pattern"),
+				stringvalidator.ConflictsWith(
+					path.MatchRelative().AtParent().AtName("password"),
+					path.MatchRelative().AtParent().AtName("otp"),
+				),
 				stringvalidator.AlsoRequires(
 					path.MatchRelative().AtParent().AtName("token_name"),
 				),
@@ -80,7 +99,11 @@ var (
 		},
 	}
 	schemaNode = map[string]schema.Attribute{
-		"host": schema.StringAttribute{
+		"name": schema.StringAttribute{
+			Required:    true,
+			Description: "name of proxmox node.",
+		},
+		"target": schema.StringAttribute{
 			Required:    true,
 			Description: "Hostname or IP of proxmox node.",
 		},
@@ -106,30 +129,6 @@ var (
 
 type ProviderClientManager map[string]*proxmox.Client
 
-type ConfiguredNode struct {
-	Host        string
-	Port        int32
-	IgnoreSSL   bool
-	Username    string
-	Password    string
-	Otp         string
-	TokenName   string
-	TokenSecret string
-}
-
-func (cn ConfiguredNode) GetCredentialMethod() proxmox.Option {
-	if cn.TokenName != "" && cn.TokenSecret != "" {
-		tokenID := fmt.Sprintf("%s!%s", cn.Username, cn.TokenName)
-		return proxmox.WithAPIToken(tokenID, cn.TokenSecret)
-	} else {
-		creds := proxmox.Credentials{
-			Username: cn.Username,
-			Password: cn.Password,
-		}
-		return proxmox.WithCredentials(&creds)
-	}
-}
-
 type pveProvider struct {
 	// version is set to the provider version on release, "dev" when the
 	// provider is built and ran locally, and "test" when running acceptance
@@ -146,7 +145,7 @@ func New(version string) func() provider.Provider {
 }
 
 func (p *pveProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "proxmox-tf"
+	resp.TypeName = "pve"
 	resp.Version = p.version
 }
 func (p *pveProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
@@ -183,9 +182,9 @@ func (p *pveProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *
 	}
 }
 func (p *pveProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	var config pveProviderModel
 	var diags diag.Diagnostics
 
+	var config pveProviderModel
 	diags = req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -204,89 +203,76 @@ func (p *pveProvider) Configure(ctx context.Context, req provider.ConfigureReque
 	}
 
 	var rootCred credentialModel
-	var hasRootCred bool
 	if !config.Credential.IsNull() && !config.Credential.IsUnknown() {
 		diags = config.Credential.As(ctx, &rootCred, basetypes.ObjectAsOptions{})
 		resp.Diagnostics.Append(diags...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		hasRootCred = true
-	} else {
-		hasRootCred = false
 	}
 
-	configuredNodes := make([]ConfiguredNode, 0, len(nodes))
-	for _, node := range nodes {
-		port := int32(8006)
-		if !node.Port.IsNull() && !node.Port.IsUnknown() {
-			port = node.Port.ValueInt32()
-		} else if !config.Port.IsNull() && !config.Port.IsUnknown() {
-			port = config.Port.ValueInt32()
+	manager := make(ProviderClientManager)
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for i, node := range nodes {
+		nodePath := path.Root("nodes").AtListIndex(i)
+		nodeConf, diags := resolveNodeConfig(ctx, node, config)
+		if diags.HasError() {
+			for _, d := range diags {
+				resp.Diagnostics.AddAttributeError(nodePath, d.Summary(), d.Detail())
+			}
+			continue
 		}
 
-		ignoreSSL := false
-		if !node.IgnoreSSL.IsNull() && !node.IgnoreSSL.IsUnknown() {
-			ignoreSSL = node.IgnoreSSL.ValueBool()
-		} else if !config.IgnoreSSL.IsNull() && !config.IgnoreSSL.IsUnknown() {
-			ignoreSSL = config.IgnoreSSL.ValueBool()
+		client, err := nodeConf.NewClient()
+		if err != nil {
+			resp.Diagnostics.AddAttributeError(
+				nodePath,
+				"Client Initialization Failed",
+				fmt.Sprintf("Failed to construct the Proxmox client instance for '%s': %s", nodeConf.Name, err),
+			)
+			continue
 		}
+		manager[nodeConf.Name] = client
 
-		var nodeCred credentialModel
-		if !node.Credential.IsNull() && !node.Credential.IsUnknown() {
-			diags = node.Credential.As(ctx, &nodeCred, basetypes.ObjectAsOptions{})
-			resp.Diagnostics.Append(diags...)
-			if resp.Diagnostics.HasError() {
+		wg.Add(1)
+		go func(c *proxmox.Client, nc ConfiguredNode, np path.Path) {
+			defer wg.Done()
+
+			testErr := testClientConnection(ctx, c)
+			if testErr != nil {
+				mu.Lock()
+				resp.Diagnostics.AddAttributeError(
+					np,
+					"Proxmox Connection Failed",
+					fmt.Sprintf("Successfully initialized client, but failed to connect to node '%s' (%s): %s", nc.Name, nc.GetConnectionString(), testErr),
+				)
+				mu.Unlock()
 				return
 			}
-		} else if hasRootCred {
-			nodeCred = rootCred
-		} else {
-			resp.Diagnostics.AddError(
-				"Missing Required Configuration",
-				"Credentials must be specified. Define the 'credential' block globally at the provider root, or explicitly inside the 'nodes' configuration list.",
-			)
-			return
-		}
-
-		configuredNodes = append(configuredNodes, ConfiguredNode{
-			Host:        node.Host.ValueString(),
-			Port:        port,
-			IgnoreSSL:   ignoreSSL,
-			Username:    nodeCred.Username.ValueString(),
-			Password:    nodeCred.Password.ValueString(),
-			Otp:         nodeCred.Otp.ValueString(),
-			TokenName:   nodeCred.TokenName.ValueString(),
-			TokenSecret: nodeCred.TokenSecret.ValueString(),
-		})
-
-		manager := make(ProviderClientManager)
-		for _, confNode := range configuredNodes {
-			nodeUrl := fmt.Sprintf("https://%s:%d/api2/json", confNode.Host, confNode.Port)
-
-			opts := make([]proxmox.Option, 0, 3)
-			opts = append(opts, confNode.GetCredentialMethod())
-			if confNode.IgnoreSSL {
-				opts = append(opts, proxmox.WithInsecureSkipVerify())
-			}
-			opts = append(opts, proxmox.WithTimeout(30*time.Second))
-
-			client := proxmox.NewClient(nodeUrl)
-
-			manager[confNode.Host] = client
-		}
-
-		resp.DataSourceData = manager
-		resp.ResourceData = manager
+		}(client, nodeConf, nodePath)
 	}
+
+	wg.Wait()
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.DataSourceData = manager
+	resp.ResourceData = manager
 }
 func (p *pveProvider) ConfigValidators(ctx context.Context) []provider.ConfigValidator {
 	return []provider.ConfigValidator{
-		NewNodeValidator(),
+		NewProvidereValidator(),
 	}
 }
 func (p *pveProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return nil
+	return []func() datasource.DataSource{
+		NewNodeNetworkDataSource,
+	}
 }
 func (p *pveProvider) Resources(_ context.Context) []func() resource.Resource {
 	return nil
