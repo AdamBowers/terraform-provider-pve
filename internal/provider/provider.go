@@ -272,6 +272,7 @@ func (p *pveProvider) ConfigValidators(ctx context.Context) []provider.ConfigVal
 func (p *pveProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewNodeNetworkDataSource,
+		NewNodeVersionDataSource,
 	}
 }
 func (p *pveProvider) Resources(_ context.Context) []func() resource.Resource {
