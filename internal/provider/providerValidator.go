@@ -14,7 +14,7 @@ type providerValidateCheck func(context.Context, provider.ValidateConfigRequest,
 type providerValidateSet []providerValidateCheck
 type providerValidator []providerValidateSet
 
-func NewProvidereValidator() *providerValidator {
+func NewProviderValidator() *providerValidator {
 	nodeChecks := providerValidateSet{
 		validateNodeAttributeFallback,
 		validateNoDuplicateNodeNames,

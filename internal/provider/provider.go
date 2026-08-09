@@ -266,7 +266,7 @@ func (p *pveProvider) Configure(ctx context.Context, req provider.ConfigureReque
 }
 func (p *pveProvider) ConfigValidators(ctx context.Context) []provider.ConfigValidator {
 	return []provider.ConfigValidator{
-		NewProvidereValidator(),
+		NewProviderValidator(),
 	}
 }
 func (p *pveProvider) DataSources(_ context.Context) []func() datasource.DataSource {
