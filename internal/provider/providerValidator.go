@@ -122,7 +122,7 @@ func validateNoDuplicateNodeTargetValues(ctx context.Context, req provider.Valid
 			)
 			continue
 		} else {
-			seenNodeTargets[nodeName] = i
+			seenNodeTargets[nodeTarget] = i
 		}
 	}
 }
