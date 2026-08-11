@@ -7,8 +7,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-
-	"github.com/google/uuid"
 )
 
 var _ datasource.DataSource = &nodeNetworkDataSource{}
@@ -30,9 +28,6 @@ func (d *nodeNetworkDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Retrieves information about network interfaces, bridges, bonds, and links configured on a specific Proxmox node.",
 		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{
-				Computed: true,
-			},
 			"node": schema.StringAttribute{
 				MarkdownDescription: "The name of the target Proxmox node to fetch network links from.",
 				Required:            true, // We must know which host to probe
@@ -53,16 +48,32 @@ func (d *nodeNetworkDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 							MarkdownDescription: "Indicates whether the network interface is currently operational.",
 							Computed:            true,
 						},
+						"autostart": schema.BoolAttribute{
+							MarkdownDescription: "Whether the interface starts automatically on system boot.",
+							Computed:            true,
+						},
 						"cidr": schema.StringAttribute{
-							MarkdownDescription: "The IPv4 or IPv6 network address space assigned to the link.",
+							MarkdownDescription: "The IPv4 network address space assigned to the link.",
 							Computed:            true,
 						},
 						"gateway": schema.StringAttribute{
-							MarkdownDescription: "The default gateway routed through this interface.",
+							MarkdownDescription: "The IPv4 default gateway routed through this interface.",
 							Computed:            true,
 						},
-						"autostart": schema.BoolAttribute{
-							MarkdownDescription: "Whether the interface starts automatically on system boot.",
+						"cidr6": schema.StringAttribute{
+							MarkdownDescription: "The IPv6 network address space assigned to the link.",
+							Computed:            true,
+						},
+						"gateway6": schema.StringAttribute{
+							MarkdownDescription: "The IPv6 default gateway routed through this interface.",
+							Computed:            true,
+						},
+						"comments": schema.StringAttribute{
+							MarkdownDescription: "Comments for the IPv4 configuration.",
+							Computed:            true,
+						},
+						"comments6": schema.StringAttribute{
+							MarkdownDescription: "Comments for the IPv6 configuration.",
 							Computed:            true,
 						},
 					},
@@ -127,22 +138,24 @@ func (d *nodeNetworkDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
-	var uid [16]byte = uuid.New()
-	state.ID = types.StringValue(fmt.Sprintf("pve-net-%s-%x", targetNode, uid))
-	state.Networks = make([]nodeNetworkItemModel, 0, len(networks))
+	state.Networks = make([]nodeNetworkIfaceModel, 0, len(networks))
 
 	for _, netLink := range networks {
 		if netLink == nil {
 			continue
 		}
 
-		state.Networks = append(state.Networks, nodeNetworkItemModel{
+		state.Networks = append(state.Networks, nodeNetworkIfaceModel{
 			Name:      types.StringValue(netLink.Iface),
 			Type:      types.StringValue(netLink.Type),
 			Active:    types.BoolValue(netLink.Active == 1), // maps int 1/0 flags to boolean types
+			Autostart: types.BoolValue(netLink.Autostart == 1),
 			CIDR:      types.StringValue(netLink.CIDR),
 			Gateway:   types.StringValue(netLink.Gateway),
-			Autostart: types.BoolValue(netLink.Autostart == 1),
+			CIDR6:     types.StringValue(netLink.CIDR6),
+			Gateway6:  types.StringValue(netLink.Gateway6),
+			Comments:  types.StringValue(netLink.Comments),
+			Comments6: types.StringValue(netLink.Comments6),
 		})
 	}
 
