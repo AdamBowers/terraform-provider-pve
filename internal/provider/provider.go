@@ -273,8 +273,11 @@ func (p *pveProvider) DataSources(_ context.Context) []func() datasource.DataSou
 	return []func() datasource.DataSource{
 		NewNodeNetworkDataSource,
 		NewNodeVersionDataSource,
+		NewUsersDataSource,
 	}
 }
 func (p *pveProvider) Resources(_ context.Context) []func() resource.Resource {
-	return nil
+	return []func() resource.Resource{
+		// NewUserResource,
+	}
 }
