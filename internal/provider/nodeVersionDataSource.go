@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -28,29 +27,21 @@ func (d *nodeVersionDataSource) Schema(_ context.Context, _ datasource.SchemaReq
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Retrieves information release, version and repoid for a Proxmox Virtual Environment node.",
 		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{
-				Computed: true,
-			},
 			"node": schema.StringAttribute{
 				MarkdownDescription: "The name of the target Proxmox Virtual Environment node to fetch network links from.",
 				Required:            true, // We must know which host to probe
 			},
-			"version": schema.SingleNestedAttribute{
-				Computed: true,
-				Attributes: map[string]schema.Attribute{
-					"release": schema.StringAttribute{
-						MarkdownDescription: "The current Proxmox VE point release in `x.y` format.",
-						Computed:            true,
-					},
-					"repoid": schema.StringAttribute{
-						MarkdownDescription: "The short git revision from which this version was build.",
-						Computed:            true,
-					},
-					"version": schema.StringAttribute{
-						MarkdownDescription: "The full pve-manager package version of this node.",
-						Computed:            true,
-					},
-				},
+			"release": schema.StringAttribute{
+				MarkdownDescription: "The current Proxmox VE point release in `x.y` format.",
+				Computed:            true,
+			},
+			"repoid": schema.StringAttribute{
+				MarkdownDescription: "The short git revision from which this version was build.",
+				Computed:            true,
+			},
+			"version": schema.StringAttribute{
+				MarkdownDescription: "The full pve-manager package version of this node.",
+				Computed:            true,
 			},
 		},
 	}
@@ -100,13 +91,9 @@ func (d *nodeVersionDataSource) Read(ctx context.Context, req datasource.ReadReq
 		return
 	}
 
-	var uid [16]byte = uuid.New()
-	state.ID = types.StringValue(fmt.Sprintf("pve-net-%s-%x", targetNode, uid))
-	state.Version = &nodeVersionModel{
-		Release: types.StringValue(version.Release),
-		Repoid:  types.StringValue(version.RepoID),
-		Version: types.StringValue(version.Version),
-	}
+	state.Release = types.StringValue(version.Release)
+	state.Repoid = types.StringValue(version.RepoID)
+	state.Version = types.StringValue(version.Version)
 
 	diags = resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
