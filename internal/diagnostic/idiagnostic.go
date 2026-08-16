@@ -11,6 +11,9 @@ type IDiagnostic interface {
 	// Returns a detailed message of the diagnostic
 	Detail() string
 
+	// Returns the stacktrace of the diagnostic
+	Stacktrace() string
+
 	// Returns the severity of the diagnostic
 	Severity() Severity
 
