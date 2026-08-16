@@ -1,10 +1,10 @@
 package diagnostic
 
-type Severity string
+type severity string
 
 const (
-	SEVERITY_Error   Severity = "Error"
-	SEVERITY_Warning Severity = "Warning"
-	SEVERITY_Info    Severity = "Info"
-	SEVERITY_Verbose Severity = "Verbose"
+	SEVERITY_Error   severity = "Error"
+	SEVERITY_Warning severity = "Warning"
+	SEVERITY_Info    severity = "Info"
+	SEVERITY_Verbose severity = "Verbose"
 )
