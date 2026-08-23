@@ -88,7 +88,7 @@ func (t *Diagnostics) IndexOf(diag IDiagnostic) int {
 }
 
 // AnySeverity reports whether at least one stored diagnostic has the provided severity.
-func (t *Diagnostics) AnySeverity(sev Severity) bool {
+func (t *Diagnostics) AnySeverity(sev severity) bool {
 	snap := t.Snapshot()
 	for _, d := range snap {
 		if d.Severity() == sev {
@@ -100,7 +100,7 @@ func (t *Diagnostics) AnySeverity(sev Severity) bool {
 
 // AllSeverity reports whether all stored diagnostics have the provided severity.
 // If the snapshot is nil, it returns false.
-func (t *Diagnostics) AllSeverity(sev Severity) bool {
+func (t *Diagnostics) AllSeverity(sev severity) bool {
 	snap := t.Snapshot()
 	if snap == nil {
 		return false
@@ -120,7 +120,7 @@ func (t *Diagnostics) Count() int {
 }
 
 // CountBySeverity returns the number of stored diagnostics that have the provided severity.
-func (t *Diagnostics) CountBySeverity(sev Severity) int {
+func (t *Diagnostics) CountBySeverity(sev severity) int {
 	snap := t.Snapshot()
 
 	count := 0
