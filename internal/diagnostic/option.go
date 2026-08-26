@@ -3,7 +3,7 @@ package diagnostic
 type Option func(*diagnostic)
 
 // WithCategory sets a specific category on the diagnostic.
-func WithCategory(cat Category) Option {
+func WithCategory(cat category) Option {
 	return func(d *diagnostic) {
 		d.category = cat
 	}
