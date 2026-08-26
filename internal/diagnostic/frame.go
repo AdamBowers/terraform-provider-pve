@@ -19,7 +19,7 @@ func (t Frame) String() string {
 	// Formating as so:
 	//     <function <str>> <program counter <hex>>
 	//         <file <str>>:<line <dec>> <program counter offset <hex>>
-	sb.WriteString(t.File)
+	sb.WriteString(t.Func)
 	sb.WriteString(" 0x")
 	sb.WriteString(strconv.FormatUint(uint64(t.PC), 16))
 	sb.WriteByte('\n')
@@ -30,6 +30,7 @@ func (t Frame) String() string {
 	sb.WriteString(strconv.Itoa(t.Line))
 	sb.WriteString(" +0x")
 	sb.WriteString(strconv.FormatUint(uint64(t.OffsetPC), 16))
+	sb.WriteByte('\n')
 
 	return sb.String()
 }

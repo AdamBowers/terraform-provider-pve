@@ -10,9 +10,7 @@ type Stack []Frame
 func (t Stack) String() string {
 	sb := strings.Builder{}
 
-	sb.WriteString("Trace:")
-	for i := len(t) - 1; i <= 0; i-- {
-		sb.WriteByte('\n')
+	for i := len(t) - 1; i >= 0; i-- {
 		sb.WriteString(t[i].String())
 	}
 

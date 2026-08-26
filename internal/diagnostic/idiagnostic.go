@@ -15,7 +15,7 @@ type IDiagnostic interface {
 	Stacktrace() string
 
 	// Returns the severity of the diagnostic
-	Severity() Severity
+	Severity() severity
 
 	// Checks if this diagnostic is equal to the provided diagnostic
 	Equal(to IDiagnostic) bool
