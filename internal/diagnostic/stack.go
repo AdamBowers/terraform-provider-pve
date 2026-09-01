@@ -1,20 +1,26 @@
 package diagnostic
 
 import (
+	"io"
 	"runtime"
-	"strings"
 )
 
 type Stack []Frame
 
+func (t Stack) Write(w io.Writer) {
+	for i := len(t) - 1; i >= 0; i-- {
+		t[i].Write(w)
+	}
+}
+
 func (t Stack) String() string {
-	sb := strings.Builder{}
+	buf := make([]byte, 0, len(t)*112)
 
 	for i := len(t) - 1; i >= 0; i-- {
-		sb.WriteString(t[i].String())
+		buf = t[i].AppendTo(buf)
 	}
 
-	return sb.String()
+	return string(buf)
 }
 
 func GenerateStack(skip int) Stack {
