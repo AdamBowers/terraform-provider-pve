@@ -24,7 +24,7 @@ func TestDiagnosticInterfaceGetters(t *testing.T) {
 		severity:   SEVERITY_Error,
 		summary:    "SumMsg",
 		detail:     "DetMsg",
-		category:   Category_InvalidParamter,
+		category:   Category_InvalidParameter,
 		stacktrace: Stack{Frame{Func: "Worker"}},
 	}
 
@@ -45,7 +45,7 @@ func TestDiagnosticInterfaceGetters(t *testing.T) {
 func TestDiagnosticStringLayouts(t *testing.T) {
 	d := &diagnostic{
 		severity: SEVERITY_Warning,
-		category: Category_InvalidParamter,
+		category: Category_InvalidParameter,
 		summary:  "Bad Setup",
 		detail:   "Check configs",
 	}

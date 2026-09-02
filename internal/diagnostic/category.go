@@ -3,5 +3,5 @@ package diagnostic
 type category string
 
 const (
-	Category_InvalidParamter category = "Invalid Parameter"
+	Category_InvalidParameter category = "Invalid Parameter"
 )

@@ -10,7 +10,7 @@ func TestCategoryConstants(t *testing.T) {
 	}{
 		{
 			name:     "Invalid Parameter Constant Mapping",
-			got:      Category_InvalidParamter,
+			got:      Category_InvalidParameter,
 			expected: "Invalid Parameter",
 		},
 	}

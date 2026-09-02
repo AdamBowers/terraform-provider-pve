@@ -5,10 +5,10 @@ import "testing"
 func TestOptions(t *testing.T) {
 	t.Run("WithCategory", func(t *testing.T) {
 		d := &diagnostic{}
-		opt := WithCategory(Category_InvalidParamter)
+		opt := WithCategory(Category_InvalidParameter)
 		opt(d)
 
-		if d.category != Category_InvalidParamter {
+		if d.category != Category_InvalidParameter {
 			t.Errorf("WithCategory failed; got %q", d.category)
 		}
 	})
